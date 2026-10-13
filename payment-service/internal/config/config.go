@@ -8,20 +8,18 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// Config holds all payment-service configuration loaded from the environment.
 type Config struct {
 	Server      ServerConfig
 	Database    DatabaseConfig
 	JWTSecret   string
 	CoreService CoreServiceConfig
+	RabbitMQ    RabbitMQConfig
 }
 
-// ServerConfig holds HTTP server settings.
 type ServerConfig struct {
 	Port string
 }
 
-// DatabaseConfig holds PostgreSQL connection settings for the payment DB.
 type DatabaseConfig struct {
 	Host     string
 	Port     string
@@ -31,14 +29,21 @@ type DatabaseConfig struct {
 	SSLMode  string
 }
 
-// CoreServiceConfig holds settings for calling the core-service internal API.
 type CoreServiceConfig struct {
 	BaseURL     string
 	InternalKey string
 	Timeout     time.Duration
 }
 
-// DSN builds the PostgreSQL connection string for GORM.
+type RabbitMQConfig struct {
+	URL                string
+	Exchange           string
+	Queue              string
+	RoutingKey         string
+	DeadLetterExchange string
+	DeadLetterQueue    string
+}
+
 func (d DatabaseConfig) DSN() string {
 	return fmt.Sprintf(
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
@@ -46,7 +51,6 @@ func (d DatabaseConfig) DSN() string {
 	)
 }
 
-// Load reads configuration from a .env file (if present) and the environment.
 func Load() (*Config, error) {
 	_ = godotenv.Load()
 
@@ -66,6 +70,14 @@ func Load() (*Config, error) {
 		CoreService: CoreServiceConfig{
 			BaseURL:     getEnv("CORE_SERVICE_URL", "http://localhost:8080"),
 			InternalKey: getEnv("INTERNAL_API_KEY", ""),
+		},
+		RabbitMQ: RabbitMQConfig{
+			URL:                getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"),
+			Exchange:           getEnv("RABBITMQ_EXCHANGE", "payment.exchange"),
+			Queue:              getEnv("RABBITMQ_QUEUE", "payment.queue"),
+			RoutingKey:         getEnv("RABBITMQ_ROUTING_KEY", "payment.process"),
+			DeadLetterExchange: getEnv("RABBITMQ_DLX", "payment.dlx"),
+			DeadLetterQueue:    getEnv("RABBITMQ_DLQ", "payment.queue.dlq"),
 		},
 	}
 
@@ -95,6 +107,9 @@ func (c *Config) validate() error {
 	}
 	if c.CoreService.InternalKey == "" {
 		missing = append(missing, "INTERNAL_API_KEY")
+	}
+	if c.RabbitMQ.URL == "" {
+		missing = append(missing, "RABBITMQ_URL")
 	}
 	if len(missing) > 0 {
 		return fmt.Errorf("missing required configuration: %v", missing)
