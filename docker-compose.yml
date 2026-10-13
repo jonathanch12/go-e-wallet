@@ -3,8 +3,8 @@ services:
     image: rabbitmq:3-management
     container_name: go-e-wallet-rabbitmq
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "5672:5672"    # AMQP protocol
+      - "15672:15672"  # Management UI (http://localhost:15672, guest/guest)
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
@@ -17,5 +17,86 @@ services:
       retries: 5
     restart: unless-stopped
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: go-e-wallet-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-admin}
+      # A default DB must exist; the init script creates the two app DBs.
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Runs only on first init (empty data volume).
+      - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  core-service:
+    build:
+      context: ./core-service
+      dockerfile: Dockerfile
+    container_name: go-e-wallet-core
+    ports:
+      - "8080:8080"
+    environment:
+      SERVER_PORT: "8080"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-admin}
+      DB_NAME: ewallet_core
+      DB_SSLMODE: disable
+      JWT_SECRET: ${JWT_SECRET:-change-me-to-a-long-random-secret}
+      JWT_EXPIRY: 24h
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-change-me-to-a-shared-internal-key}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  payment-service:
+    build:
+      context: ./payment-service
+      dockerfile: Dockerfile
+    container_name: go-e-wallet-payment
+    ports:
+      - "8081:8081"
+    environment:
+      SERVER_PORT: "8081"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-admin}
+      DB_NAME: ewallet_payment
+      DB_SSLMODE: disable
+      JWT_SECRET: ${JWT_SECRET:-change-me-to-a-long-random-secret}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-change-me-to-a-shared-internal-key}
+      # Reach core-service by its compose service name.
+      CORE_SERVICE_URL: http://core-service:8080
+      CORE_SERVICE_TIMEOUT: 5s
+      # Reach RabbitMQ by its compose service name.
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      RABBITMQ_EXCHANGE: payment.exchange
+      RABBITMQ_QUEUE: payment.queue
+      RABBITMQ_ROUTING_KEY: payment.process
+      RABBITMQ_DLX: payment.dlx
+      RABBITMQ_DLQ: payment.queue.dlq
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      core-service:
+        condition: service_started
+    restart: unless-stopped
+
 volumes:
   rabbitmq_data:
+  postgres_data:
