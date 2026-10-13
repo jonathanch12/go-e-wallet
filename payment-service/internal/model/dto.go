@@ -9,10 +9,9 @@ type PayRequest struct {
 }
 
 type PayResponse struct {
-	TransactionID string  `json:"transactionID"`
-	Status        string  `json:"status"`
-	Message       string  `json:"message"`
-	NewBalance    float64 `json:"newBalance"`
+	TransactionID string `json:"transactionID"`
+	Status        string `json:"status"`
+	Message       string `json:"message"`
 }
 
 // ---- Internal DTOs (calls to core-service) ----
