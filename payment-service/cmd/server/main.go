@@ -14,6 +14,7 @@ import (
 	"payment-service/internal/coreclient"
 	"payment-service/internal/database"
 	"payment-service/internal/handler"
+	"payment-service/internal/mq"
 	"payment-service/internal/repository"
 	"payment-service/internal/router"
 	"payment-service/internal/security"
@@ -36,26 +37,35 @@ func main() {
 	}
 	log.Println("payment-service: database connected and migrated")
 
-	// Security (verify-only; tokens are minted by core-service).
 	verifier := security.NewJWTVerifier(cfg.JWTSecret)
 
-	// Core-service client for wallet debits.
 	coreClient := coreclient.New(cfg.CoreService.BaseURL, cfg.CoreService.InternalKey, cfg.CoreService.Timeout)
 
-	// Repository + service.
-	paymentRepo := repository.NewPaymentRepository(db)
-	paymentService := service.NewPaymentService(paymentRepo, coreClient)
+	mqConn, err := mq.Connect(cfg.RabbitMQ)
+	if err != nil {
+		log.Fatalf("rabbitmq: %v", err)
+	}
+	defer mqConn.Close()
+	log.Println("payment-service: connected to rabbitmq")
 
-	// Handlers.
+	publisher := mq.NewPublisher(mqConn)
+
+	paymentRepo := repository.NewPaymentRepository(db)
+	paymentService := service.NewPaymentService(paymentRepo, coreClient, publisher)
+
 	handlers := router.Handlers{
 		Payment: handler.NewPaymentHandler(paymentService),
 	}
 
-	// Background worker (expiry sweeper).
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	workerMgr := worker.NewManager(paymentService)
 	workerMgr.Start(ctx)
+
+	consumer := mq.NewConsumer(mqConn, paymentService)
+	if err := consumer.Start(ctx); err != nil {
+		log.Fatalf("rabbitmq consumer: %v", err)
+	}
 
 	engine := router.New(handlers, verifier)
 	srv := &http.Server{
