@@ -177,29 +177,29 @@ All paths are under the `/api/v1` base path of their service.
 
 ```bash
 # 1. Register (core-service)
-curl -X POST http://localhost:8080/api/v1/users/register \
-  -H "Content-Type: application/json" \
-  -d '{"name":"John Doe","email":"john@example.com","password":"secret123"}'
+curl -X POST http://localhost:8080/api/v1/users/register
+  -H "Content-Type: application/json"
+  -d "{\"name\":\"John Doe\",\"email\":\"john@example.com\",\"password\":\"secret123\"}"
 
 # 2. Login -> copy the "token" from the response
-curl -X POST http://localhost:8080/api/v1/users/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"john@example.com","password":"secret123"}'
+curl -X POST http://localhost:8080/api/v1/users/login
+  -H "Content-Type: application/json"
+  -d "{\"email\":\"john@example.com\",\"password\":\"secret123\"}"
 
 # 3. Top up (core-service)
-curl -X POST http://localhost:8080/api/v1/transactions/topup \
-  -H "Authorization: Bearer <TOKEN>" \
-  -H "Content-Type: application/json" \
-  -d '{"amount":1000000}'
+curl -X POST http://localhost:8080/api/v1/transactions/topup
+  -H "Authorization: Bearer <TOKEN>"
+  -H "Content-Type: application/json"
+  -d "{\"amount\":1000000}"
 
 # 4. Pay a merchant (payment-service, port 8081, same token)
-curl -X POST http://localhost:8081/api/v1/transactions/pay \
-  -H "Authorization: Bearer <TOKEN>" \
-  -H "Content-Type: application/json" \
-  -d '{"merchantID":"merchant-123","amount":25000,"description":"Coffee"}'
+curl -X POST http://localhost:8081/api/v1/transactions/pay
+  -H "Authorization: Bearer <TOKEN>"
+  -H "Content-Type: application/json"
+  -d "{\"merchantID\":\"merchant-123\",\"amount\":25000,\"description\":\"Coffee\"}"
 
 # 5. History (core-service) — the payment appears here
-curl http://localhost:8080/api/v1/transactions/history \
+curl http://localhost:8080/api/v1/transactions/history
   -H "Authorization: Bearer <TOKEN>"
 ```
 
